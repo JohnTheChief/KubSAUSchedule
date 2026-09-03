@@ -1,4 +1,4 @@
-![КубГАУ](assets/kubsau_logo_240.png)
+<p align="center"><img src="assets/Kubsau_Vertical_Logo.png" alt="КубГАУ" width="220"></p>
 
 # Расписание КубГАУ
 
