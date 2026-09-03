@@ -1,0 +1,109 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build and sign APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-tags: true
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Resolve version from tag
+        id: version
+        shell: bash
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "release" ]]; then
+            tag="${GITHUB_REF_NAME}"
+          else
+            tag="$(git describe --tags --abbrev=0 2>/dev/null || echo v0.0.0)-dev"
+          fi
+          name="${tag#v}"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+          echo "code=${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+          echo "Version ${name} (${GITHUB_RUN_NUMBER}) from ${tag}"
+
+      - name: Decode signing keystore
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [[ -z "${KEYSTORE_BASE64}" ]]; then
+            echo "::error::Secret KEYSTORE_BASE64 is not set. See README, section «Релиз»."
+            exit 1
+          fi
+          echo "${KEYSTORE_BASE64}" | base64 --decode > "${RUNNER_TEMP}/release.jks"
+
+      - name: Build signed release APK
+        env:
+          KEYSTORE_FILE: ${{ runner.temp }}/release.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: >
+          ./gradlew :app:assembleRelease
+          -PversionName=${{ steps.version.outputs.name }}
+          -PversionCode=${{ steps.version.outputs.code }}
+          --no-daemon --console=plain
+
+      - name: Verify signature and rename APK
+        id: apk
+        shell: bash
+        run: |
+          apk="$(ls app/build/outputs/apk/release/*.apk | head -1)"
+          build_tools="$(ls -d "${ANDROID_HOME}/build-tools/"* | sort -V | tail -1)"
+          "${build_tools}/apksigner" verify --print-certs "${apk}"
+          out="KubSAUSchedule-${{ steps.version.outputs.tag }}.apk"
+          cp "${apk}" "${out}"
+          sha256sum "${out}" > "${out}.sha256"
+          echo "path=${out}" >> "$GITHUB_OUTPUT"
+
+      - name: Remove keystore
+        if: always()
+        shell: bash
+        run: rm -f "${RUNNER_TEMP}/release.jks"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.apk.outputs.path }}
+          path: |
+            ${{ steps.apk.outputs.path }}
+            ${{ steps.apk.outputs.path }}.sha256
+          if-no-files-found: error
+
+      - name: Attach APK to the release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ steps.apk.outputs.path }}
+            ${{ steps.apk.outputs.path }}.sha256

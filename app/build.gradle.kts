@@ -3,6 +3,14 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+// Подпись релиза берётся из окружения (CI) и не требуется для локальной debug-сборки:
+//   KEYSTORE_FILE, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD
+val releaseKeystore: String? = System.getenv("KEYSTORE_FILE")?.takeIf { it.isNotBlank() }
+
+// Версию можно переопределить из CI: -PversionName=1.2.3 -PversionCode=42
+val ciVersionName = providers.gradleProperty("versionName").orNull
+val ciVersionCode = providers.gradleProperty("versionCode").orNull?.toIntOrNull()
+
 android {
     namespace = "me.heyjohn.kubsauschedule"
     compileSdk {
@@ -13,10 +21,21 @@ android {
         applicationId = "me.heyjohn.kubsauschedule"
         minSdk = 29
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = ciVersionCode ?: 1
+        versionName = ciVersionName ?: "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS")
+                keyPassword = System.getenv("KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
@@ -24,6 +43,7 @@ android {
             optimization {
                 enable = false
             }
+            signingConfig = signingConfigs.findByName("release")
         }
     }
     compileOptions {
