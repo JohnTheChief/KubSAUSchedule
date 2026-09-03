@@ -62,6 +62,9 @@ jobs:
           fi
           echo "${KEYSTORE_BASE64}" | base64 --decode > "${RUNNER_TEMP}/release.jks"
 
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
       - name: Build signed release APK
         env:
           KEYSTORE_FILE: ${{ runner.temp }}/release.jks
