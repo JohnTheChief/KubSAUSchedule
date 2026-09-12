@@ -1,5 +1,6 @@
 package me.heyjohn.kubsauschedule.data
 
+import android.util.Log
 import com.google.gson.JsonParser
 import com.google.gson.JsonSyntaxException
 import me.heyjohn.kubsau.Group

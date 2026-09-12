@@ -56,7 +56,7 @@ android {
 }
 
 dependencies {
-    implementation("com.github.JohnTheChief:kubsau-schedule4j:1.0.1")
+    implementation("com.github.JohnTheChief:kubsau-schedule4j:1.0.2")
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
